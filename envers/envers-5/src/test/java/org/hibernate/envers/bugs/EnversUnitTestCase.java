@@ -6,10 +6,18 @@
  */
 package org.hibernate.envers.bugs;
 
+import entities.Book;
+import entities.PageReview;
+import entities.Page;
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.cfg.Configuration;
 import org.hibernate.envers.AuditReader;
 import org.junit.Test;
+import static org.junit.Assert.*;
+
+import javax.persistence.EntityManager;
+import java.util.LinkedList;
+import java.util.List;
 
 /**
  * This template demonstrates how to develop a test case for Hibernate Envers, using
@@ -21,8 +29,9 @@ public class EnversUnitTestCase extends AbstractEnversTestCase {
 	@Override
 	protected Class[] getAnnotatedClasses() {
 		return new Class[] {
-//				Foo.class,
-//				Bar.class
+				PageReview.class,
+				Page.class,
+				Book.class
 		};
 	}
 
@@ -50,10 +59,57 @@ public class EnversUnitTestCase extends AbstractEnversTestCase {
 		//configuration.setProperty( AvailableSettings.GENERATE_STATISTICS, "true" );
 	}
 
-	// Add your tests, using standard JUnit.
 	@Test
-	public void hhh123Test() throws Exception {
+	public void testHHH11364WithoutPage() throws Exception {
 		AuditReader reader = getAuditReader();
-		// Do stuff...
+
+		List<PageReview> pageReviews = new LinkedList<>();
+		pageReviews.add(new PageReview("comment without a page"));
+
+		Book book = new Book();
+		book.setTornPages(pageReviews);
+
+
+		book = save(book);
+		Book auditedBook = reader.find(Book.class, book.getId(), 1);
+
+		assertNotNull(auditedBook);
+		assertEquals("I should have a PageReview but it's missing!", 1, auditedBook.getTornPages().size());
+
+	}
+
+	@Test
+	public void testHHH11364WithPage() throws Exception {
+		AuditReader reader = getAuditReader();
+
+		Page page = new Page();
+		page.setText("ABC");
+
+		// creates REV 1
+		page = save(page);
+
+		List<PageReview> pageReviews = new LinkedList<>();
+		pageReviews.add(new PageReview("comment with a page", page));
+
+		Book book = new Book();
+		book.setTornPages(pageReviews);
+
+		// creates REV 2
+		book = save(book);
+		Book auditedBook = reader.find(Book.class, book.getId(), 2);
+
+		assertNotNull(auditedBook);
+		assertEquals("I should have a PageReview but it's missing!", 1, auditedBook.getTornPages().size());
+	}
+
+	private <T> T save(T entity) {
+		EntityManager em = openSession().getEntityManagerFactory().createEntityManager();
+
+		em.getTransaction().begin();
+		entity = em.merge(entity);
+		em.flush();
+		em.getTransaction().commit();
+		em.close();
+		return entity;
 	}
 }
